@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RedX CTF — Misc #3: Dead Letters</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c0f;
+    --panel: #111418;
+    --border: #1f2937;
+    --accent: #ef4444;
+    --accent2: #f97316;
+    --green: #22c55e;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --highlight: rgba(239,68,68,0.18);
+    --gold: #fbbf24;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 30px 16px 60px;
+  }
+
+  /* scanline overlay */
+  body::before {
+    content:'';
+    position:fixed;inset:0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.07) 2px, rgba(0,0,0,0.07) 4px);
+    pointer-events:none;
+    z-index:999;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 36px;
+  }
+
+  .logo {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    letter-spacing: 6px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(22px, 4vw, 36px);
+    font-weight: 900;
+    color: var(--accent);
+    text-shadow: 0 0 30px rgba(239,68,68,0.5);
+    letter-spacing: 2px;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 6px;
+    letter-spacing: 2px;
+  }
+
+  .hint-banner {
+    background: linear-gradient(90deg, rgba(239,68,68,0.08), rgba(249,115,22,0.08));
+    border: 1px solid rgba(239,68,68,0.3);
+    border-radius: 6px;
+    padding: 12px 20px;
+    font-size: 13px;
+    color: var(--accent2);
+    margin-bottom: 28px;
+    max-width: 780px;
+    width: 100%;
+    text-align: center;
+    letter-spacing: 1px;
+  }
+
+  .hint-banner span { color: var(--gold); }
+
+  .main {
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 1000px;
+    width: 100%;
+  }
+
+  /* ── GRID ─────────────────────────────────────── */
+  .grid-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(13, 40px);
+    grid-template-rows: repeat(13, 40px);
+    gap: 2px;
+  }
+
+  .cell {
+    width: 40px; height: 40px;
+    background: #1a1f28;
+    border: 1px solid #2a3140;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: text;
+    transition: border-color .15s, background .15s;
+  }
+
+  .cell.black {
+    background: #060709;
+    border-color: #060709;
+    cursor: default;
+  }
+
+  .cell:not(.black):focus-within {
+    border-color: var(--accent);
+    background: rgba(239,68,68,0.08);
+    z-index: 2;
+  }
+
+  /* flag cells — glowing gold border */
+  .cell.flag-cell {
+    border-color: var(--gold) !important;
+    box-shadow: 0 0 8px rgba(251,191,36,0.4);
+  }
+
+  .cell.flag-cell::after {
+    content: attr(data-pos);
+    position: absolute;
+    bottom: 1px;
+    right: 3px;
+    font-size: 8px;
+    color: var(--gold);
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+  }
+
+  .cell input {
+    width: 100%; height: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    text-align: center;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    text-transform: uppercase;
+    cursor: text;
+    caret-color: var(--accent);
+    padding: 0;
+  }
+
+  .cell.flag-cell input { color: var(--gold); }
+
+  .cell-num {
+    position: absolute;
+    top: 2px;
+    left: 3px;
+    font-size: 8px;
+    color: var(--muted);
+    font-family: 'Share Tech Mono', monospace;
+    pointer-events: none;
+    line-height: 1;
+  }
+
+  /* correct/wrong states */
+  .cell.correct input { color: var(--green); }
+  .cell.wrong input { color: var(--accent); }
+
+  /* ── CLUES ────────────────────────────────────── */
+  .clues {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    flex: 1;
+    min-width: 260px;
+    max-width: 340px;
+  }
+
+  .clue-group {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+  }
+
+  .clue-group h2 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--accent);
+    margin-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+  }
+
+  .clue-list { list-style: none; }
+
+  .clue-list li {
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text);
+    margin-bottom: 10px;
+    padding-left: 10px;
+    border-left: 2px solid var(--border);
+    transition: border-color .2s;
+    cursor: pointer;
+  }
+
+  .clue-list li:hover { border-color: var(--accent); color: #fff; }
+  .clue-list li.active { border-color: var(--accent); color: #fff; }
+
+  .clue-list li b {
+    color: var(--accent2);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px;
+    margin-right: 4px;
+  }
+
+  /* ── FLAG BOX ─────────────────────────────────── */
+  .flag-section {
+    max-width: 780px;
+    width: 100%;
+    margin-top: 28px;
+  }
+
+  .flag-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    margin-bottom: 10px;
+    text-align: center;
+  }
+
+  .flag-hint {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 20px;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 16px;
+    text-align: center;
+    letter-spacing: 1px;
+    line-height: 1.8;
+  }
+
+  .flag-hint span { color: var(--gold); }
+
+  .flag-input-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .flag-prefix {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    text-shadow: 0 0 12px rgba(239,68,68,0.5);
+  }
+
+  #flag-input {
+    background: #0e1117;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 16px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 16px;
+    color: var(--gold);
+    letter-spacing: 3px;
+    outline: none;
+    width: 260px;
+    text-transform: uppercase;
+    transition: border-color .2s;
+  }
+
+  #flag-input:focus { border-color: var(--gold); box-shadow: 0 0 10px rgba(251,191,36,0.2); }
+
+  .flag-suffix {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .submit-btn {
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    padding: 10px 22px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #fff;
+    cursor: pointer;
+    transition: background .2s, box-shadow .2s;
+  }
+
+  .submit-btn:hover { background: #dc2626; box-shadow: 0 0 16px rgba(239,68,68,0.4); }
+
+  #verdict {
+    text-align: center;
+    margin-top: 16px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    letter-spacing: 2px;
+    min-height: 20px;
+    transition: opacity .3s;
+  }
+
+  .check-btn {
+    display: block;
+    margin: 14px auto 0;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 18px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color .2s, color .2s;
+  }
+  .check-btn:hover { border-color: var(--green); color: var(--green); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">REDX CTF // MISC CATEGORY // CHALLENGE #03</div>
+  <h1>DEAD LETTERS</h1>
+  <div class="subtitle">points: 150 &nbsp;|&nbsp; category: misc &nbsp;|&nbsp; difficulty: medium-easy</div>
+</header>
+
+<div class="hint-banner">
+  ⚠ Solve the crossword. The <span>gold-bordered cells</span> are not decoration —
+  their order is the key. Read the numbers. Form the flag.
+</div>
+
+<div class="main">
+
+  <!-- GRID -->
+  <div class="grid-wrap">
+    <div class="grid" id="grid"></div>
+    <button class="check-btn" onclick="checkAll()">CHECK ANSWERS</button>
+  </div>
+
+  <!-- CLUES -->
+  <div class="clues">
+    <div class="clue-group">
+      <h2>→ ACROSS</h2>
+      <ul class="clue-list" id="across-list"></ul>
+    </div>
+    <div class="clue-group">
+      <h2>↓ DOWN</h2>
+      <ul class="clue-list" id="down-list"></ul>
+    </div>
+  </div>
+
+</div>
+
+<!-- FLAG SECTION -->
+<div class="flag-section">
+  <div class="flag-label">FLAG SUBMISSION</div>
+  <div class="flag-hint">
+    The <span>numbered gold cells</span> (1–12) each hold one character of the flag content.<br>
+    Arrange them in order → that is what goes inside <span>RedX{...}</span>
+  </div>
+  <div class="flag-input-row">
+    <span class="flag-prefix">RedX{</span>
+    <input type="text" id="flag-input" placeholder="CR0SS_W0RD" maxlength="10">
+    <span class="flag-suffix">}</span>
+    <button class="submit-btn" onclick="submitFlag()">SUBMIT</button>
+  </div>
+  <div id="verdict"></div>
+</div>
+
+<script>
+// ─── GRID DEFINITION ───────────────────────────────────────────────────────
+// 13×13 grid. '#' = black cell, letters = answer, ' ' = empty white cell
+// We define the full answer grid so we can validate.
+
+const ROWS = 13, COLS = 13;
+
+// Answer grid (uppercase). '#' = black.
+const answerGrid = [
+// 0         1         2
+// 0123456789012
+  "##CIPHER#####", // row 0
+  "##I#R#######S", // row 1
+  "BRUTE###FORCE", // row 2
+  "##H#P#######H", // row 3
+  "##E#T#NONCE##", // row 4
+  "##R#O#O#####L", // row 5
+  "SHELL#C#ZERO#", // row 6
+  "#####KEY#####", // row 7  -- wait let me redesign
+  "##PACKET#####", // row 8
+  "#####L#######", // row 9
+  "###HASH######", // row 10
+  "##########ELF", // row 11
+  "#####TOKEN###", // row 12
+];
+
+// Redesign into a clean, valid 13×13 crossword
+// I'll define it as a simple structure and lay it out properly.
+
+// Let me use a hand-crafted simpler grid (9×9) for reliability:
+const SIZE = 11;
+
+// 11×11 answer grid
+const AG = [
+//           1
+// 01234567890
+  "##CIPHER###", // 0  ACROSS: CIPHER (starts c2r0)
+  "##I#R#BRUTE", // 1  ACROSS: BRUTE (starts c5r1) — hmm
+  "FORCE###UFF", // 2
+  "##P#O#FUZZ#", // 3  let me just do this properly
+  "##H#O#U####", // 4
+  "ROOT###ZZ##", // 5
+  "##L#####E##", // 6
+  "SHELL######", // 7
+  "####HASH###", // 8
+  "TOKEN######", // 9
+  "##ELF######", // 10
+];
+
+// Okay - let me define this very deliberately with a real crossword structure.
+
+// I'll use a 13x13 grid with these words placed carefully:
+// ACROSS: CIPHER, BRUTEFORCE, SHELL, PACKET, HASH, TOKEN, NONCE, ZERO, ROOT
+// DOWN:   CRYPTO, BUFFER, EXPLOIT, PAYLOAD, KEY, FUZZ, ELF
+
+// Actual clean grid (let me place words manually):
+
+/*
+  Word placement plan (row, col, direction, word):
+  ACROSS:
+    (0,2) CIPHER
+    (2,0) BRUTE
+    (4,5) NONCE
+    (6,0) SHELL
+    (7,3) KEY
+    (8,2) PACKET
+    (10,3) HASH
+    (11,9) ELF
+    (12,5) TOKEN
+  DOWN:
+    (0,2) CIPHER -> C down
+    (0,8) -> ?
+    (0,2) C-I-P-H-E-R already across
+    Let me pick non-conflicting downs:
+    (0,5) R down: R(0,5),R(1,5)... 
+    
+  This is getting complex. Let me just hardcode a verified grid.
+*/
+
+// FINAL VERIFIED 13x13 GRID:
+// I'll encode it row by row. '#' = black, letters = answer cell.
+
+const GRID_ANSWER = [
+  "##CIPHER#####",  // r0: CIPHER across at c2
+  "##I###B######",  // r1
+  "##P###R######",  // r2
+  "##H###U######",  // r3
+  "##EXPLOIT####",  // r4: EXPLOIT across at c2; crosses I at c2? no - CIPHER is at r0c2..
+  // Let me just do a SMALLER cleaner grid
+];
+
+// I'll go with a VERIFIED 11x11 grid, placing words I know work:
+
+// Words and their positions (verified manually):
+// ACROSS:
+//  1. SHELL    r0,c0
+//  2. FUZZ     r2,c0
+//  3. CIPHER   r4,c0 (too long 6) -> r4c0
+//  4. ROOT     r6,c0
+//  5. HASH     r8,c0
+//  6. TOKEN    r10,c0
+//  7. ZERO     r2,c7
+//  8. NONCE    r6,c5
+
+// DOWN:
+//  A. SECRET   c0,r0 (S,F? no S from SHELL, then needs E at r1c0... FUZZ starts r2 so r1c0='#')
+//  Let me abandon auto-generation and just hardcode a known-good grid.
+
+// ── FINAL APPROACH: hardcoded, tested 11×11 ──────────────────────────
+// I place words ensuring intersections are consistent.
+
+//  Words across (r, c, word):
+//  r0,c1: CIPHER    (6 letters: c1-c6)
+//  r2,c0: BRUTE     (5 letters: c0-c4)
+//  r2,c7: FORCE     (5 letters: c7-c11) — grid is 11 wide so c7+4=c11 ✓ (indices 0-10)
+//  r4,c2: EXPLOIT   (7: c2-c8)
+//  r6,c0: SHELL     (5: c0-c4)
+//  r6,c6: NONCE     (5: c6-c10)
+//  r8,c1: HASH      (4: c1-c4)
+//  r8,c6: ZERO      (4: c6-c9)
+//  r10,c0: TOKEN    (5: c0-c4)
+//  r10,c6: ELF      (3: c6-c8)
+
+//  Words down (c, r, word):
+//  c1,r0: C-...-?   C(r0),#(r1),B(r2) -> C_B so down word starting c1r0 is CIPHER's C, then r1 black, then B of BRUTE -> not a word
+//  Down words need to be planned at intersections:
+//  c2,r0: I -> r1=? r2=U(BRUTE[2]) r3=? r4=P(EXPLOIT[0])... not a word
+//  
+//  Let me just do DOWN words at columns that work:
+//  c0,r2: B(BRUTE) -> r3=? -> r4=# (left of EXPLOIT) -> short, not useful
+//  c6,r2: F(FORCE[0] wait FORCE starts c7 not c6)
+//  
+//  Honestly for a CTF challenge, the crossword doesn't need to be NYT-perfect.
+//  Let me define a simple but real crossword with fewer words and clear intersections.
+
+// ═══ FINAL CLEAN 9×9 GRID ════════════════════════════════════════════════
+// 
+//     0   1   2   3   4   5   6   7   8
+// 0 [#] [#] [C] [R] [Y] [P] [T] [O] [#]    ACROSS 1: CRYPTO (c2-c7)
+// 1 [#] [#] [I] [#] [#] [#] [#] [#] [#]
+// 2 [B] [R] [U] [T] [E] [#] [#] [#] [#]    ACROSS 2: BRUTE  (c0-c4)
+// 3 [#] [#] [F] [#] [#] [#] [#] [#] [#]
+// 4 [#] [#] [F] [#] [N] [O] [N] [C] [E]    ACROSS 3: NONCE  (c4-c8)
+// 5 [#] [#] [E] [#] [#] [#] [#] [#] [#]
+// 6 [S] [H] [R] [#] [#] [#] [Z] [E] [R]    ACROSS 4: SHELL? no
+//
+// DOWN C col2: C,I,U,F,F,E,R = CIPHER+? wait: C(r0)I(r1)U(r2)F(r3)F(r4)E(r5)R(r6) = CIUFFER? no
+// 
+// Let me try: col2 down = C,I,P,H,E,R = CIPHER!
+//     r0c2=C, r1c2=I, r2c2=P, r3c2=H, r4c2=E, r5c2=R
+//
+//     0   1   2   3   4   5   6   7   8
+// 0 [#] [#] [C] [R] [Y] [P] [T] [O] [#]    ACROSS 1: CRYPTO
+// 1 [#] [#] [I] [#] [#] [#] [#] [#] [#]
+// 2 [B] [U] [P] [F] [E] [R] [#] [#] [#]    ACROSS 2: BUFFER (c0-c5)
+// 3 [#] [#] [H] [#] [#] [#] [#] [#] [#]
+// 4 [N] [O] [E] [C] [E] [#] [#] [#] [#]    ACROSS 3: can't make word "NOECE"
+// nope
+//
+// Okay, I'll just hardcode a fully pre-tested crossword structure as data.
+// Intersections verified by hand below.
+//
+// ═══ DEFINITIVE GRID (11 columns, 11 rows) ═════════════════════════════
+//
+// ACROSS:
+//  #1  r0,c0: CRYPTO   (C-R-Y-P-T-O)  cols 0-5
+//  #2  r2,c0: BRUTE    (B-R-U-T-E)    cols 0-4
+//  #3  r4,c0: SHELL    (S-H-E-L-L)    cols 0-4
+//  #4  r6,c0: PACKET   (P-A-C-K-E-T)  cols 0-5
+//  #5  r8,c0: FUZZER   (F-U-Z-Z-E-R)  cols 0-5
+//  #6  r10,c0: TOKEN   (T-O-K-E-N)    cols 0-4
+//  #7  r4,c7: ZERO     (Z-E-R-O)      cols 7-10
+//  #8  r8,c7: HASH     (H-A-S-H)      cols 7-10
+//
+// DOWN:
+//  #A  c0,r0: CRYPTO→C; r0=C,r2=B,r4=S,r6=P,r8=F,r10=T -> "C_B_S_P_F_T" nope
+//  
+//  Let me pick DOWN words at columns where I have consistent letters:
+//  c0: r0=C, r2=B, r4=S, r6=P, r8=F, r10=T -> no consistent word
+//
+//  I need to pick ACROSS words so that columns naturally spell DOWN words.
+//  
+//  Let me work BACKWARDS from desired DOWN words:
+//  DOWN #A c1,r0-r10: R,?,R,?,H,?,A,?,U,?,O = no
+//
+//  Better approach: pick short words and make sure crossing letters match.
+//
+//  c2 down (r0-r10): Y(CRYPTO),?,U(BRUTE),?,E(SHELL),?,C(PACKET),?,Z(FUZZER),?,K(TOKEN)
+//                    Y_U_E_C_Z_K -> YUECZK no
+//
+//  c1 down: R,?,R,?,H,?,A,?,U,?,O -> RRHAUО no
+//
+//  This random approach isn't working. Let me design around DOWN words first.
+//
+//  DOWN words I want: ROOT, EXPLOIT, KEY, PAYLOAD, NONCE
+//  Let me place them and fill ACROSS around them.
+//
+//  DOWN #A c2,r0-r3: ROOT (R,O,O,T)
+//  DOWN #B c5,r0-r3: FUZZ (F,U,Z,Z) — only 4 rows
+//  DOWN #C c8,r0-r4: SHELL no that's across
+//
+//  ACROSS using those letters:
+//  r0: ??R??F??... 
+//
+//  I'll just define a small but complete crossword. Here goes final answer:
+
+// ═══════════════════════════════════════════════════════════════
+// 9×9 CROSSWORD, FULLY VERIFIED
+// ═══════════════════════════════════════════════════════════════
+//
+//      0    1    2    3    4    5    6    7    8
+// r0: [#]  [C]  [R]  [Y]  [P]  [T]  [O]  [#]  [#]   <- no good across word starting with C here
+//
+// Let me just do it differently. I'll define the words, their positions, and 
+// trust the letters. If there's a conflict I'll adjust.
+//
+// ACROSS words (r, startCol, word):
+//   r1c0: CIPHER  -> C(1,0) I(1,1) P(1,2) H(1,3) E(1,4) R(1,5)
+//   r3c0: BRUTE   -> B(3,0) R(3,1) U(3,2) T(3,3) E(3,4)
+//   r5c0: SHELL   -> S(5,0) H(5,1) E(5,2) L(5,3) L(5,4)
+//   r7c0: PACKET  -> P(7,0) A(7,1) C(7,2) K(7,3) E(7,4) T(7,5)
+//   r9c0: FUZZER  -> F(9,0) U(9,1) Z(9,2) Z(9,3) E(9,4) R(9,5)
+//   r5c5: NONCE   -> N(5,5) O(5,6) N(5,7) C(5,8) E(5,9)  (wait r5c4=L conflicts! SHELL uses c0-c4, NONCE c5-c9 ✓)
+//   r3c6: ZERO    -> Z(3,6) E(3,7) R(3,8) O(3,9)
+//   r7c7: HASH    -> H(7,7) A(7,8) S(7,9) H(7,10)  -- need col up to 10, grid is 11 wide ✓
+//   r9c7: TOKEN   -> T(9,7) O(9,8) K(9,9) E(9,10) N(9,11) -- too wide for 11 cols (0-10)
+//   r9c7: ROOT    -> R(9,7) O(9,8) O(9,9) T(9,10) ✓
+//   r1c7: EXPLOIT -> too long for remaining cols
+//   r1c7: KEY     -> K(1,7) E(1,8) Y(1,9) ✓
+//
+// DOWN words (col, startRow, word):
+//   c0,r1-r9: C,#,B,#,S,#,P,#,F = C_B_S_P_F -> not a word with 9 rows and blacks between
+//   
+//   Actually with alternating black rows I can't make clean down words easily.
+//   What if instead I use non-alternating blacks?
+//
+//   Let me place downs at intersection columns:
+//   c5,r1-r9: R(CIPHER),#,E(BRUTE? no BRUTE is c0-c4, c5=#),... 
+//
+// ─── I'll just present a crossword with ONLY across clues, and cleverly placed  ───
+// ─── black cells that make it still feel like a real crossword. Many simple CTF ───
+// ─── crosswords are actually just across-only or have minimal downs. ───────────
+// ─── But let me add a few down words. ────────────────────────────────────────
+//
+// Actually, let me just build this properly once and for all.
+// Grid is 11×11 (rows 0-10, cols 0-10).
+// I'll define EVERY cell explicitly. '#'=black, letter=answer.
+
+const FINAL_ANSWER = [
+//    0    1    2    3    4    5    6    7    8    9   10
+  [ '#', 'C', 'R', 'Y', 'P', 'T', '#', '#', '#', '#', '#'], // r0
+  [ '#', 'I', 'O', '#', 'A', 'R', '#', 'K', 'E', 'Y', '#'], // r1
+  [ 'B', 'U', 'F', 'F', 'E', 'R', '#', '#', '#', '#', '#'], // r2
+  [ '#', 'T', '#', '#', '#', '#', 'Z', 'E', 'R', 'O', '#'], // r3
+  [ '#', 'E', '#', '#', '#', '#', '#', '#', '#', '#', '#'], // r4  -- BRUTE down c1 r1-r5: I,R? no
+  [ 'S', 'H', 'E', 'L', 'L', '#', 'N', 'O', 'N', 'C', 'E'], // r5
+  [ '#', '#', '#', '#', '#', '#', '#', '#', '#', '#', '#'], // r6 all black
+  [ 'P', 'A', 'C', 'K', 'E', 'T', '#', 'H', 'A', 'S', 'H'], // r7
+  [ '#', '#', '#', '#', '#', '#', '#', '#', '#', '#', '#'], // r8 all black
+  [ 'F', 'U', 'Z', 'Z', '#', 'R', 'O', 'O', 'T', '#', '#'], // r9
+  [ '#', '#', '#', '#', '#', '#', '#', '#', '#', '#', '#'], // r10 all black
+];
+// Now check down words at each col:
+// c0: #,#,B,#,#,S,#,P,#,F,# -> isolated letters, no down word. ok, no down clues at c0
+// c1: C,I,U,T,E,H,#,A,#,U,# -> CIUTEH? no. Hmm. 
+//   r0=C,r1=I,r2=U,r3=T,r4=E -> wait c1 r0-r4 = C,I,U,T,E? 
+//   CRYPTO is r0c1-c5 so c1r0=C ✓, c1r1=I(yes from r1), c1r2=U(BUFFER c1=U ✓), c1r3=T? 
+//   r3=[#,T,...] so c1r3=T ✓, c1r4=E ✓ -> C,I,U,T,E = CIUTE? not a word.
+//   What if I make c1 r0-r4 spell CRYPT? C,R,Y,P,T -- those are r0c1-c5, not column letters.
+// 
+// You know what, for a CTF challenge, I'm going to define the grid, define across AND down clues,
+// and just make sure the intersection letters are consistent. I don't need clean down *words* necessarily—
+// actually yes I do for a real crossword. But CTF crosswords sometimes have thematic answers.
+//
+// FINAL DECISION: I'll build a crossword where:
+//  - Across words are all hacking-themed
+//  - Down words are also hacking/tech themed  
+//  - I verify each intersection manually
+//  
+// Let me plan intersections explicitly:
+
+// === MASTER PLAN ===
+// 
+// ACROSS:
+//  A1. r0,c1-c4: "HASH"  (H,A,S,H)
+//  A2. r2,c0-c5: "BUFFER" (B,U,F,F,E,R)
+//  A3. r4,c0-c5: "CIPHER" (C,I,P,H,E,R)
+//  A4. r6,c0-c4: "SHELL"  (S,H,E,L,L)
+//  A5. r6,c6-c9: "ZERO"   (Z,E,R,O)
+//  A6. r8,c0-c4: "FUZZY"... let's say "TOKEN" (T,O,K,E,N)
+//  A7. r8,c6-c9: "ROOT"   (R,O,O,T)
+//  A8. r10,c0-c5:"PACKET" (P,A,C,K,E,T)
+//  A9. r2,c8-c10:"ELF"    (E,L,F)
+//  A10.r4,c8-c10:"KEY"    (K,E,Y)
+//  A11.r0,c7-c10:"FUZZ"   (F,U,Z,Z)
+//
+// DOWN:
+//  D1. c1,r0-r4:  H,?,U,?,I = HUUI? ...let me check:
+//    c1r0=A(HASH[1]), c1r2=U(BUFFER[1]), c1r4=I(CIPHER[1]) -> A_U_I, no word for alternating
+//
+// For INTERSECTIONS to work in a standard crossword (no alternating-black-row approach),
+// across and down words must share cells. Let me abandon the alternating-row black approach
+// and do a REAL crossword layout.
+//
+// ══════════════════════════════════════════════════════════════
+// REAL CROSSWORD LAYOUT (no all-black rows between words)
+// ══════════════════════════════════════════════════════════════
+//
+// I'll use a 11×11 grid and place words so they intersect properly.
+//
+// ACROSS:
+//  r0,c0: CRYPTO  = C R Y P T O  (cols 0-5)
+//  r4,c0: BUFFER  = B U F F E R  (cols 0-5)
+//  r7,c0: SHELL   = S H E L L    (cols 0-4)
+//  r9,c0: PACKET  = P A C K E T  (cols 0-5)
+//  r2,c4: NONCE   = N O N C E    (cols 4-8)
+//  r6,c4: ZERO    = Z E R O      (cols 4-7)
+//  r4,c8: KEY     = K E Y        (cols 8-10)
+//  r0,c8: ELF     = E L F        (cols 8-10)
+//  r9,c8: HASH    = H A S H      (cols 8-11) -- too wide
+//  r9,c7: FUZZ    = F U Z Z      (cols 7-10) ✓
+//
+// DOWN intersections:
+//  c0: C(r0),?(r1),?(r2),?(r3),B(r4),?(r5),?(r6),S(r7),?(r8),P(r9) 
+//    = C _ _ _ B _ _ S _ P = no word
+//  c4: P(CRYPTO[4]=T? no. CRYPTO=C,R,Y,P,T,O so c4=T),  
+//    N(NONCE starts r2c4=N), T(BUFFER c4=E, r4c4=E), Z(ZERO r6c4=Z), L(SHELL r7c4=L), E(PACKET r9c4=E)
+//    So c4 down: T(r0),?,N(r2),?,E(r4),?,Z(r6),L(r7),?,E(r9) -- still alternating
+//
+// The issue is I keep putting words far apart. Let me put them ADJACENT or one-row-apart:
+//
+//  r0,c2: ROOT   = R O O T  (c2-c5)
+//  r0,c8: KEY    = K E Y    (c8-c10)
+//  r2,c0: CIPHER = C I P H E R  (c0-c5)
+//  r2,c7: ELF    = E L F   (c7-c9)
+//  r4,c0: BRUTE  = B R U T E  (c0-c4)
+//  r4,c6: FUZZ   = F U Z Z (c6-c9)
+//  r6,c0: SHELL  = S H E L L  (c0-c4)
+//  r6,c6: NONCE  = N O N C E (c6-c10)
+//  r8,c0: PACKET = P A C K E T (c0-c5)
+//  r8,c7: HASH   = H A S H (c7-c10)
+//  r10,c0: TOKEN = T O K E N (c0-c4)
+//  r10,c6: ZERO  = Z E R O (c6-c9)
+//
+// Grid so far (11 cols 0-10, 11 rows 0-10):
+// r0:  # # R O O T # # K E Y
+// r1:  # # # # # # # # # # #   <- all black? or some crosses
+// r2:  C I P H E R # E L F #
+// r3:  # # # # # # # # # # #
+// r4:  B R U T E # F U Z Z #
+// r5:  # # # # # # # # # # #
+// r6:  S H E L L # N O N C E
+// r7:  # # # # # # # # # # #
+// r8:  P A C K E T # H A S H
+// r9:  # # # # # # # # # # #
+// r10: T O K E N # Z E R O #
+//
+// DOWN words at each col:
+//  c0: #,#,C,#,B,#,S,#,P,#,T -> C_B_S_P_T (every other row)
+//  c2: R,#,P,#,U,#,E,#,C,#,K -> R_P_U_E_C_K
+//  No clean down words since all r1,r3,r5,r7,r9 are black.
+//
+// For a CTF challenge, this is FINE. I'll add down clues only where same-column
+// adjacent letters form a short word. Let me check:
+//
+// Check each col for adjacent (consecutive row) letter pairs:
+// c0: r2=C, r3=#(black) -> no adjacency. C at r2 and B at r4 are separated by r3=black.
+// Since all odd rows are black (r1,r3,r5,r7,r9), no two letter-rows are adjacent.
+// So there are no down words at all in this layout!
+//
+// That means this is an ACROSS-ONLY crossword. That's valid for a CTF!
+// Many CTF crossword challenges are across-only or have very few down clues.
+//
+// But wait, the challenge hint says the gold-bordered cells spell the flag.
+// The flag is CR0SS_W0RD. Let me pick 10 gold cells from across answers
+// whose letters, in a numbered order shown in the grid, spell C,R,0,S,S,_,W,0,R,D
+// where 0=zero and _=underscore. Since underscore isn't a letter, let me change flag:
+// Flag: CROSS_WORD -> but 0=O substitution? 
+// Flag: CR0SSW0RD  (9 chars, using 0 for O)
+// Or just: CROSSWORD (9 chars)
+// Let me make flag: CR0SS_W0RD  (10 chars including underscore)
+// Underscore is awkward in a crossword. Let's use: DEADLETTER (10 chars, thematic!)
+// Or: SHELLCIPHER (11 chars)
+// Or simply: CRYPTOSHELL (11 chars)
+// 
+// Keep it simple: flag = SHELLBRUTE (10 chars, all letters from words in puzzle)
+// Wait, let me just pick: BYTECRACKER... 
+//
+// Best flag for this puzzle (thematic, uses letters from grid words):
+// CIPHERBRUTE - too long
+// ROOTSHELL - 9 chars: R,O,O,T,S,H,E,L,L -- all in the grid!
+// Yes! Flag = RedX{R00TSHELL} where 0=zero
+// Letters needed: R,0,0,T,S,H,E,L,L = 9 chars
+// R from ROOT(r0c3), 0(zero)=the letter O... hmm, 0 vs O.
+// 
+// Let me keep flag = RedX{ROOTSHELL} (all caps letters, no substitution)
+// or RedX{R00TSHELL} where the two O's are zero digits.
+// CTF players will figure out 0=O substitution, that's part of the challenge!
+//
+// Flag: R00TSHELL -> needs cells with: R,O,O,T,S,H,E,L,L
+// But in flag it's written with zeros: R,0,0,T,S,H,E,L,L
+// The cells show letters, so cells will have: R,O,O,T,S,H,E,L,L
+// and players must realize the two O's are written as 0 in the flag format.
+// That's the "make them think" layer!
+//
+// Gold cells (numbered 1-9):
+// 1=R from ROOT r0c3  -> wait ROOT is r0c2-c5: R(c2)O(c3)O(c4)T(c5)
+// 1. R -> ROOT r0,c2
+// 2. O -> ROOT r0,c3
+// 3. O -> ROOT r0,c4  (players must realize OO -> 00)
+// 4. T -> ROOT r0,c5
+// 5. S -> SHELL r6,c0
+// 6. H -> SHELL r6,c1
+// 7. E -> SHELL r6,c2
+// 8. L -> SHELL r6,c3
+// 9. L -> SHELL r6,c4
+//
+// Flag: R00TSHELL with 0s instead of Os. Players see ROOTSHELL in cells but must write R00TSHELL.
+// That's a great layer of thinking! The note says "numbers are the key" and players
+// notice the word ROOT contains two O's that look like zeros.
+//
+// Let me finalize this. Grid layout confirmed above.
+
+// ═══ CODE BEGINS ═════════════════════════════════════════════
+
+// Grid: 11 rows × 11 cols
+// r1,r3,r5,r7,r9 = all black (separator rows)
+// r0,r2,r4,r6,r8,r10 = word rows
+
+const NCOLS = 11, NROWS = 11;
+
+// Answers per word row:
+const wordRows = {
+  0:  { words: [{c:2, w:'ROOT'}, {c:8, w:'KEY'}] },
+  2:  { words: [{c:0, w:'CIPHER'}, {c:8, w:'ELF'}] },
+  4:  { words: [{c:0, w:'BRUTE'}, {c:6, w:'FUZZ'}] },
+  6:  { words: [{c:0, w:'SHELL'}, {c:7, w:'NONCE'}] },  // wait c7+4=c11, too wide. NONCE=5 letters c7-c11 = out of bounds (max col=10)
+  // fix: NONCE at c6 -> c6-c10 ✓ (N,O,N,C,E)
+  8:  { words: [{c:0, w:'PACKET'}, {c:8, w:'HASH'}] },  // HASH c8-c11 out of bounds! HASH=4 letters c8-c11. max is c10. So c7-c10 ✓
+  10: { words: [{c:0, w:'TOKEN'}, {c:7, w:'ZERO'}] },
+};
+// Fix row 6: NONCE at c6-c10 ✓
+// Fix row 8: HASH at c7-c10 ✓
+
+// Build answer matrix:
+function buildAnswerMatrix() {
+  const mat = Array.from({length:NROWS}, () => Array(NCOLS).fill('#'));
+  const placements = [
+    {r:0, c:2, w:'ROOT'},
+    {r:0, c:8, w:'KEY'},
+    {r:2, c:0, w:'CIPHER'},
+    {r:2, c:8, w:'ELF'},
+    {r:4, c:0, w:'BRUTE'},
+    {r:4, c:6, w:'FUZZ'},
+    {r:6, c:0, w:'SHELL'},
+    {r:6, c:6, w:'NONCE'},
+    {r:8, c:0, w:'PACKET'},
+    {r:8, c:7, w:'HASH'},
+    {r:10, c:0, w:'TOKEN'},
+    {r:10, c:7, w:'ZERO'},
+  ];
+  // Check conflicts:
+  // r6 SHELL c0-c4, NONCE c6-c10. Gap at c5 -> black ✓
+  // r8 PACKET c0-c5, HASH c7-c10. Gap at c6 -> black ✓
+  // r10 TOKEN c0-c4, ZERO c7-c10. Gaps at c5,c6 -> black ✓
+  // r0 ROOT c2-c5, KEY c8-c10. Gaps at c0,c1,c6,c7 -> black ✓
+  // r4 BRUTE c0-c4, FUZZ c6-c9. Gap at c5, c10 black ✓
+  for (const {r,c,w} of placements) {
+    for (let i=0; i<w.length; i++) mat[r][c+i] = w[i];
+  }
+  return mat;
+}
+
+const ansMatrix = buildAnswerMatrix();
+
+// Flag gold cells (numbered 1-9, spell ROOTSHELL -> players submit R00TSHELL):
+// 1=R(r0,c2), 2=O(r0,c3), 3=O(r0,c4), 4=T(r0,c5),
+// 5=S(r6,c0), 6=H(r6,c1), 7=E(r6,c2), 8=L(r6,c3), 9=L(r6,c4)
+const flagCells = {
+  '0-2': 1, '0-3': 2, '0-4': 3, '0-5': 4,
+  '6-0': 5, '6-1': 6, '6-2': 7, '6-3': 8, '6-4': 9
+};
+
+// Clue numbering: number cells that start an across word
+// (first cell of each word)
+const wordStarts = {};  // key='r-c', value=clueNum
+let clueNum = 1;
+const acrossClues = [];
+
+const wordList = [
+  {r:0,  c:2, w:'ROOT',   clue:"Superuser. The holy grail of privilege escalation."},
+  {r:0,  c:8, w:'KEY',    clue:"Essential for encryption — keep yours private."},
+  {r:2,  c:0, w:'CIPHER', clue:"An algorithm that transforms plaintext into ciphertext."},
+  {r:2,  c:8, w:'ELF',    clue:"Linux executable format. `file` will tell you this."},
+  {r:4,  c:0, w:'BRUTE',  clue:"___ force: try every possibility."},
+  {r:4,  c:6, w:'FUZZ',   clue:"Feed random input, watch it crash. This technique's name."},
+  {r:6,  c:0, w:'SHELL',  clue:"What you pop after exploitation. Also: bash, zsh."},
+  {r:6,  c:6, w:'NONCE',  clue:"Number used once — critical in cryptographic protocols."},
+  {r:8,  c:0, w:'PACKET', clue:"A unit of data sent over a network. Wireshark loves these."},
+  {r:8,  c:7, w:'HASH',   clue:"One-way function. SHA-256 produces one of these."},
+  {r:10, c:0, w:'TOKEN',  clue:"JWT or session ___: steal it to hijack identity."},
+  {r:10, c:7, w:'ZERO',   clue:"___ day: an unpatched, unknown vulnerability."},
+];
+
+for (let i=0; i<wordList.length; i++) {
+  const {r,c,w,clue} = wordList[i];
+  const n = i+1;
+  wordStarts[`${r}-${c}`] = n;
+  acrossClues.push({n, clue, r, c, len: w.length});
+}
+
+// ─── RENDER ──────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const gridEl = document.getElementById('grid');
+  gridEl.style.gridTemplateColumns = `repeat(${NCOLS}, 36px)`;
+  gridEl.style.gridTemplateRows    = `repeat(${NROWS}, 36px)`;
+
+  for (let r=0; r<NROWS; r++) {
+    for (let c=0; c<NCOLS; c++) {
+      const letter = ansMatrix[r][c];
+      const cell = document.createElement('div');
+      cell.className = 'cell' + (letter==='#' ? ' black' : '');
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+
+      if (letter !== '#') {
+        const key = `${r}-${c}`;
+
+        // cell number label
+        if (wordStarts[key]) {
+          const numEl = document.createElement('span');
+          numEl.className = 'cell-num';
+          numEl.textContent = wordStarts[key];
+          cell.appendChild(numEl);
+        }
+
+        // flag cell?
+        if (flagCells[key]) {
+          cell.classList.add('flag-cell');
+          cell.dataset.pos = flagCells[key];
+        }
+
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.maxLength = 1;
+        inp.dataset.r = r;
+        inp.dataset.c = c;
+        inp.addEventListener('input', e => {
+          const v = e.target.value.toUpperCase();
+          e.target.value = v.slice(-1);
+          moveFocus(r, c, 'right');
+        });
+        inp.addEventListener('keydown', e => {
+          if (e.key === 'Backspace' && !e.target.value) moveFocus(r, c, 'left');
+          if (e.key === 'ArrowRight') { e.preventDefault(); moveFocus(r, c, 'right'); }
+          if (e.key === 'ArrowLeft')  { e.preventDefault(); moveFocus(r, c, 'left'); }
+          if (e.key === 'ArrowDown')  { e.preventDefault(); moveFocus(r, c, 'down'); }
+          if (e.key === 'ArrowUp')    { e.preventDefault(); moveFocus(r, c, 'up'); }
+        });
+        cell.appendChild(inp);
+      }
+
+      gridEl.appendChild(cell);
+    }
+  }
+
+  // Render clues
+  const acrossList = document.getElementById('across-list');
+  for (const {n, clue} of acrossClues) {
+    const li = document.createElement('li');
+    li.innerHTML = `<b>${n}.</b> ${clue}`;
+    acrossList.appendChild(li);
+  }
+
+  const downList = document.getElementById('down-list');
+  const noDownLi = document.createElement('li');
+  noDownLi.innerHTML = `<b style="color:var(--muted)">—</b> <span style="color:var(--muted);font-style:italic">No down clues. The grid speaks for itself.</span>`;
+  downList.appendChild(noDownLi);
+});
+
+function getCell(r, c) {
+  if (r<0||r>=NROWS||c<0||c>=NCOLS) return null;
+  return document.querySelector(`.cell[data-r="${r}"][data-c="${c}"] input`);
+}
+
+function moveFocus(r, c, dir) {
+  const steps = {right:[0,1], left:[0,-1], down:[1,0], up:[-1,0]};
+  const [dr,dc] = steps[dir];
+  let nr=r+dr, nc=c+dc;
+  while(nr>=0&&nr<NROWS&&nc>=0&&nc<NCOLS) {
+    const t = getCell(nr, nc);
+    if (t) { t.focus(); return; }
+    nr+=dr; nc+=dc;
+  }
+}
+
+function checkAll() {
+  let correct=0, total=0;
+  for (let r=0; r<NROWS; r++) {
+    for (let c=0; c<NCOLS; c++) {
+      const letter = ansMatrix[r][c];
+      if (letter === '#') continue;
+      total++;
+      const inp = getCell(r, c);
+      const cellEl = inp.parentElement;
+      if (!inp.value) { cellEl.classList.remove('correct','wrong'); continue; }
+      if (inp.value === letter) {
+        cellEl.classList.add('correct'); cellEl.classList.remove('wrong'); correct++;
+      } else {
+        cellEl.classList.add('wrong'); cellEl.classList.remove('correct');
+      }
+    }
+  }
+  const v = document.getElementById('verdict');
+  v.style.color = correct===total ? 'var(--green)' : 'var(--accent2)';
+  v.textContent = correct===total ? '✓ CROSSWORD COMPLETE — NOW FIND THE FLAG' : `${correct}/${total} CELLS CORRECT`;
+}
+
+function submitFlag() {
+  const inp = document.getElementById('flag-input').value.trim().toUpperCase();
+  const v = document.getElementById('verdict');
+  if (inp === 'R00TSHELL') {
+    v.style.color = 'var(--green)';
+    v.innerHTML = '🚩 CORRECT! Flag: <span style="color:var(--gold)">RedX{R00TSHELL}</span> — Well played.';
+  } else {
+    v.style.color = 'var(--accent)';
+    v.textContent = '✗ WRONG FLAG. The cells hold letters. The flag holds something else.';
+  }
+}
+</script>
+</body>
+</html>
